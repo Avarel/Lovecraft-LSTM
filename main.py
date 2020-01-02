@@ -1,4 +1,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
+from typing import List, Dict, Set, Tuple
+
+import logging
 
 import numpy as np
 import os
@@ -6,35 +9,46 @@ import datetime
 
 import tensorflow as tf
 
+logging.basicConfig()
+logger = logging.getLogger("lovecraft-lstm")
+logger.setLevel(logging.DEBUG)
 
-def txt_data(dir: str) -> str:
+def txt_data(dir: str) -> Tuple[int, str]:
     """Obtain a string from appending all the data within a directory.
 
-    Parameters:
-    dir (str): the directory to scan .txt files from
+    :param dir (str): the directory to scan .txt files from
 
-    Returns:
-    str: All of the text in the directory as one string
+    :rtype (int, str):
+    :returns int: Number of files found.
+    :returns str: All of the text in the directory as one string
     """
     text = ''
+    count = 0
     for file in os.listdir(dir):
         if file.endswith('.txt'):
-            print("Found file ", file)
+            logger.debug("Found file %s", file)
+            count += 1
             text += open(os.path.join(dir, file)).read()
-    return text
+    return count, text
 
 
-def parse_text(text: str) -> (int, int, dict, np.ndarray, np.ndarray):
-    # words = [w for w in data.split(' ') if w.strip() != '' or w == '\n']
+def extract_vocab(text: str) -> Tuple[List[str], Set[str], np.ndarray]:
+    """Extracts the vocabulary, the character-integer mapping, 
+    and the integer-character mapping from the text.
 
+    :param text (str): the text to extract information from
+
+    :rtype (list, set, array):
+    :returns vocab (list): The vocabulary
+    :returns char2int (set): The character-integer mapping
+    :returns int2char (array): The integer-character mapping
+    """
     vocab = sorted(set(text))
+    return vocab, {c: i for i, c in enumerate(vocab)}, np.array(vocab)
 
-    # print(vocab)
 
-    char2int = {c: i for i, c in enumerate(vocab)}
-    int2char = np.array(vocab)
-
-    return len(text), len(vocab), char2int, int2char, np.array([char2int[ch] for ch in text], dtype=np.int32)
+def parse_text(vocab: List[str], char2int: np.ndarray, text: str) -> np.ndarray:
+    return np.array([char2int[ch] for ch in text], dtype=np.int32)
 
 
 def split_input_target(chunk):
@@ -88,8 +102,10 @@ def build_model(vocab_size: int, embedding_dim: int, rnn_units: int, batch_size:
 def time_for_file():
     return datetime.datetime.now().strftime("_%m.%d.%y-%H.%M.%S")
 
+
 def loss(labels, logits):
     return tf.keras.losses.sparse_categorical_crossentropy(labels, logits, from_logits=True)
+
 
 def run_model(
         model: tf.keras.Model,
@@ -99,30 +115,19 @@ def run_model(
         epochs: int = 50,
         patience: int = 10
 ):
-    print("Debugging:")
-    print(tr_dataset)
-    print(val_dataset)
-    # print("Checking example batch...")
-    # for input_example_batch, target_example_batch in tr_dataset.take(1):
-    #     example_batch_predictions = model(input_example_batch)
-    #     print(example_batch_predictions.shape)
-
-    #     example_batch_loss = loss(target_example_batch, example_batch_predictions)
-    #     print("Loss:      ", example_batch_loss.numpy().mean())
-
     optimizer = tf.keras.optimizers.Adam()
     model.compile(optimizer=optimizer, loss=loss)
     early_stop = tf.keras.callbacks.EarlyStopping(
         monitor='val_loss', patience=patience)
 
-    print("Begin training...")
+    logger.info("Begin training... (this will take a while)")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt_{epoch}")
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_prefix,
         save_weights_only=True)
     history = model.fit(tr_dataset, epochs=epochs, callbacks=[
                         checkpoint_callback, early_stop], validation_data=val_dataset)
-    print("Training stopped as there was no improvement after {} epochs".format(patience))
+    logger.info("Training stopped as there was no improvement after {} epochs".format(patience))
 
 
 def generation(
@@ -132,19 +137,30 @@ def generation(
         seq_length: int = 200,
         rnn_units: int = 1024,
 ):
-    print("Preparing data...")
+    logger.info("Looking through data...")
 
-    text_len, vocab_len, char2int, int2char, tr_data = parse_text(txt_data(
-        "./data/training"))
+    logger.info("Looking through training data...")
+    tr_count, tr_text = txt_data("./data/training")
+    logger.info("Found %d training files.", tr_count)
+
+    logger.info("Looking through validation data...")
+    val_count, val_text = txt_data("./data/validation")
+    logger.info("Found %d validation files.", val_count)
+
+    logger.info("Preparing data...")
+    vocab, char2int, int2char = extract_vocab(tr_text + val_text)
+    vocab_len = len(vocab)
+
+    tr_data = parse_text(vocab, char2int, tr_text)
     tr_dataset = prep_dataset(tr_data, batch_size, buffer_size, seq_length)
-    _, _, _, _, val_data = parse_text(txt_data("./data/validation"))
+    val_data = parse_text(vocab, char2int, val_text)
     val_dataset = prep_dataset(val_data, batch_size, buffer_size, seq_length)
 
-    # lr = 0.001 #will use default for Adam optimizer
-    examples_per_epoch = text_len//seq_length
-    vocab_size = vocab_len
+    logger.info("Training text size:       \t%d", len(tr_data))
+    logger.info("Validation text size:     \t%d", len(val_text))
+    logger.info("Training:validation ratio:\t%f", len(tr_data) / len(val_text))
 
-    print("Building model...")
+    logger.info("Building model...")
 
     model = build_model(
         vocab_size=vocab_len,
@@ -155,17 +171,20 @@ def generation(
 
     model.summary()
 
-    checkpoint_dir = './checkpoints' + time_for_file()
+    # return
+
+    checkpoint_dir = os.path.join(
+        './checkpoints/', 'checkpoint' + time_for_file())
 
     run_model(model, checkpoint_dir, tr_dataset, val_dataset)
 
-
-    model = build_model(vocab_size, embedding_dim, rnn_units, batch_size=1)
+    model = build_model(vocab_len, embedding_dim, rnn_units, batch_size=1)
     model.load_weights(tf.train.latest_checkpoint(checkpoint_dir))
     model.build(tf.TensorShape([1, None]))
-    def generate_text(model, start_string):
 
-        print('Generating with seed: "' + start_string + '"')
+
+    def generate_text(model, start_string):
+        logger.info('Generating with seed: "%s"', start_string)
 
         num_generate = 1000
         input_eval = [char2int[s] for s in start_string]
@@ -182,6 +201,6 @@ def generation(
             input_eval = tf.expand_dims([predicted_id], 0)
             text_generated.append(int2char[predicted_id])
         return (start_string + ''.join(text_generated))
-    print(generate_text(model, start_string="joy of gods"))
+    logger.info(generate_text(model, start_string="the deep dark"))
 
 generation()

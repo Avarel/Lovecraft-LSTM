@@ -34,7 +34,7 @@ _________________________________________________________________
 ## Google Colaboratory
 * Upload the training and validation text files.
     * Compress the contents of the folders into a `.zip` and extract using the following command on the kernel.
-        * `!unzip -o "./Archive.zip" -d "./"`
+        * `!unzip -o "./data.zip" -d "./"`
 * Set up the journal to use the correct Tensorflow version and beg the Google lords to allow you to use their **Nvidia Tesla P100** GPUs.
     * Add the following into the kernel:
          ```python

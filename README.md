@@ -34,8 +34,8 @@ _________________________________________________________________
 
 ### Google Colaboratory
 * Upload the training and validation text files.
-    * Compress the contents of the folders into a `.zip` and extract using the following command on the kernel.
-        * `!unzip -o "./data.zip" -d "./"`
+    * Compress the contents of the project into a `.zip` and extract using the following command on the kernel.
+        * `!unzip -o "./Archive.zip" -d "./"`
 * Set up the journal to use the correct Tensorflow version and beg the Google lords to allow you to use their **Nvidia Tesla P100** GPUs.
     * Add the following into the kernel:
          ```python
@@ -45,7 +45,7 @@ _________________________________________________________________
                 pass
             !pip install tensorflow-gpu```
 * Copy the code from `./main.py` over to a code block.
-* Run the code block first, this is very important so the journal is set up with the right code.
+* Run the code block.
 
 ## Running the Code
 ### Local Machine
@@ -57,11 +57,13 @@ For each of the desired tasks, type the following code blocks into code cells on
 
 #### Reading the Dataset
 ```python
-vocab_len, char2int, int2char, tr_dataset, val_dataset = get_datasets(batch_size)
+import ml_data
+vocab_len, char2int, int2char, tr_dataset, val_dataset = ml_data.get_datasets(batch_size)
 ```
 #### Building the Model
 ```python
-model = build_model(
+import ml
+model = ml.build_model(
     vocab_len,
     embedding_dim,
     rnn_units,
@@ -71,17 +73,21 @@ model = build_model(
 
 #### Training the Model
 ```python
-train_model(model, tr_dataset, val_dataset, checkpoint_dir)
+import ml
+ml.train_model(model, tr_dataset, val_dataset, checkpoint_dir)
 ```
 
 #### Resuming from a Checkpoint
 ```python
+import ml
+import tensorflow as tf
 model.load_weights(tf.train.latest_checkpoint(checkpoint_dir))
 ```
 
 #### Generating Text with the Model
 ```python
-generate_text(model, char2int, int2char, "the deep dark")
+import ml
+ml.generate_text(model, char2int, int2char, "the deep dark")
 ```
 
 #### Downloading Checkpoints
@@ -89,7 +95,7 @@ generate_text(model, char2int, int2char, "the deep dark")
 * Use the following lines.
     ```python
     from google.colab import files
-    files.download('./checkpoints/checkpoint_XXXX/ckpt_XX.data-0000X-of-0000X') 
+    files.download('./checkpoints/cp_XXXX/ckpt_XX.data-0000X-of-0000X') 
     ```
 
 # Sample

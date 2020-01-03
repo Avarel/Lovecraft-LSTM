@@ -26,12 +26,13 @@ Trainable params: 13,683,234
 Non-trainable params: 0
 _________________________________________________________________
 ```
+# Instructions
+## Setting Up the Code
 
-# Running the Code
-## Local Machine
-* One day, I'll get a GPU strong enough that I can actually do this, but not today.
+### Local Machine
+* Clone the repository into your local machine.
 
-## Google Colaboratory
+### Google Colaboratory
 * Upload the training and validation text files.
     * Compress the contents of the folders into a `.zip` and extract using the following command on the kernel.
         * `!unzip -o "./data.zip" -d "./"`
@@ -45,12 +46,55 @@ _________________________________________________________________
             !pip install tensorflow-gpu```
 * Copy the code from `./main.py` over to a code block.
 * Run the code block first, this is very important so the journal is set up with the right code.
-* Run `generate()`.
+
+## Running the Code
+### Local Machine
+* Unless you have a strong GPU for machine learning, good luck.
+* You can, however, download a checkpoint and generate text with it. In that case, you can read the dataset, build a model, load the weights, and generate the text with the Google Colaboratory instructions.
+
+### Google Colaboratory
+For each of the desired tasks, type the following code blocks into code cells on the notebook and execute.
+
+#### Reading the Dataset
+```python
+vocab_len, char2int, int2char, tr_dataset, val_dataset = get_datasets(batch_size)
+```
+#### Building the Model
+```python
+model = build_model(
+    vocab_len,
+    embedding_dim,
+    rnn_units,
+    batch_size
+)
+```
+
+#### Training the Model
+```python
+train_model(model, tr_dataset, val_dataset, checkpoint_dir)
+```
+
+#### Resuming from a Checkpoint
+```python
+model.load_weights(tf.train.latest_checkpoint(checkpoint_dir))
+```
+
+#### Generating Text with the Model
+```python
+generate_text(model, char2int, int2char, "the deep dark")
+```
+
+#### Downloading Checkpoints
+
+* Use the following lines.
+    ```python
+    from google.colab import files
+    files.download('./checkpoints/checkpoint_XXXX/ckpt_XX.data-0000X-of-0000X') 
+    ```
 
 # Sample
 Here's a sample so far! Nothing interesting though. Need to feed more data into the model.
 
 `
-the deep dark occur—and that the loor of the Furry Gilman itself, had Dunwhise heaved in shapeless tide and fears re, but wisher seems to be a alandous in June—That south, too, was somewhat more terrible in a strack on that; since the vast comments about the repty of the country college came another to winter and guttural curaaous caces and unhallowed heath-pessible wooded ildss which almost unendured my new stary, and changed clights of stalactites; the exounding voices which connected about an extensive courtyard. After we had caught thes in my mind, and of the most larder could be. This face was in hand.
-     The north, underalieby of the old rain was such which would be depirate; for the most purpose they quite usly a nervois palaeogain scattered, siltening with its midnight and exceptionally wild about the childish masses of utter and undescribed stone after meals and colours. This hasbous circular shapes that seemed not fledly pre-hadded. And by that very crossed the curving road in the inter
+the deep dark whe did not like the way the spell, though whether they were intimated from the southeast. Only when they approached a display sane polar which such continues and filling in this air—bat anyway at the sea. S’ine of the carried city ahead. The witch Tilts were left and extent, the other brown. They were the prismatic seal in foetid alpost at the hills through entity in the great black hands in the Subodden sun talking with a paising rose above a huge gradual levels he did not place it, I would kind o’ believe that was not to exert 5 amidst its fiture and almost brainless thick and managing the daemoniac framework of reporters who keep the ruins on the water and saw that they were still thinking about a hill and inious that might surge out the glass from the alley-turned handlight ahead as it shortly previnced, details. Some of these times life the lurking men’s seeking ahead of various things. When it could not be put into a form after I could come down the small skull where the thing 
 `

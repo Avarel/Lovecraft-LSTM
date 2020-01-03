@@ -13,7 +13,12 @@ logging.basicConfig()
 logger = logging.getLogger("lovecraft-lstm")
 logger.setLevel(logging.DEBUG)
 
-def txt_data(dir: str) -> Tuple[int, str]:
+
+def time_for_file():
+    return datetime.datetime.now().strftime("_%m.%d.%y-%H.%M.%S")
+
+
+def txt_from_dir(dir: str) -> Tuple[int, str]:
     """Obtain a string from appending all the data within a directory.
 
     :param dir (str): the directory to scan .txt files from
@@ -57,14 +62,47 @@ def split_input_target(chunk):
     return input_text, target_text
 
 
-def prep_dataset(data: np.ndarray, batch_size: int, buffer_size: int, seq_length: int) -> tf.data.Dataset:
+def data_into_dataset(data: np.ndarray, batch_size: int, buffer_size: int, seq_length: int) -> tf.data.Dataset:
     char_dataset = tf.data.Dataset.from_tensor_slices(data)
     sequences = char_dataset.batch(seq_length + 1, drop_remainder=True)
 
     return sequences.map(split_input_target).shuffle(buffer_size).batch(batch_size, drop_remainder=True)
 
 
+def get_datasets(batch_size: int,
+                 data_root: str = './data/',
+                 buffer_size: int = 10000,
+                 seq_length: int = 200) -> Tuple[int, Set[str], np.ndarray, tf.data.Dataset, tf.data.Dataset]:
+    logger.info("Looking through data...")
+
+    logger.info("Looking through training data...")
+    tr_count, tr_text = txt_from_dir(os.path.join(data_root, "training"))
+    logger.info("Found %d training files.", tr_count)
+
+    logger.info("Looking through validation data...")
+    val_count, val_text = txt_from_dir(os.path.join(data_root, "validation"))
+    logger.info("Found %d validation files.", val_count)
+
+    logger.info("Preparing data...")
+    vocab, char2int, int2char = extract_vocab(tr_text + val_text)
+    vocab_len = len(vocab)
+
+    tr_data = parse_text(vocab, char2int, tr_text)
+    tr_dataset = data_into_dataset(
+        tr_data, batch_size, buffer_size, seq_length)
+    val_data = parse_text(vocab, char2int, val_text)
+    val_dataset = data_into_dataset(
+        val_data, batch_size, buffer_size, seq_length)
+
+    logger.info("Training text size:       \t%d", len(tr_data))
+    logger.info("Validation text size:     \t%d", len(val_text))
+    logger.info("Training:validation ratio:\t%f", len(tr_data) / len(val_text))
+
+    return vocab_len, char2int, int2char, tr_dataset, val_dataset
+
+
 def build_model(vocab_size: int, embedding_dim: int, rnn_units: int, batch_size: int) -> tf.keras.Model:
+    logger.info("Building model...")
     return tf.keras.Sequential([
         tf.keras.layers.Embedding(
             vocab_size, embedding_dim,
@@ -89,32 +127,17 @@ def build_model(vocab_size: int, embedding_dim: int, rnn_units: int, batch_size:
     ])
 
 
-# batch_size = 64
-# buffer_size = 10000
-# embedding_dim = 256
-# epochs = 50
-# seq_length = 200
-# examples_per_epoch = len(text)//seq_length
-# #lr = 0.001 #will use default for Adam optimizer
-# rnn_units = 1024
-# vocab_size = len(vocab)
+def train_model(model: tf.keras.Model,
+                tr_dataset: tf.data.Dataset,
+                val_dataset: tf.data.Dataset,
+                checkpoint_dir: str,
+                epochs: int = 100,
+                patience: int = 10):
+    model.summary()
 
-def time_for_file():
-    return datetime.datetime.now().strftime("_%m.%d.%y-%H.%M.%S")
+    def loss(labels, logits):
+        return tf.keras.losses.sparse_categorical_crossentropy(labels, logits, from_logits=True)
 
-
-def loss(labels, logits):
-    return tf.keras.losses.sparse_categorical_crossentropy(labels, logits, from_logits=True)
-
-
-def run_model(
-        model: tf.keras.Model,
-        checkpoint_dir: str,
-        tr_dataset: tf.data.Dataset,
-        val_dataset: tf.data.Dataset,
-        epochs: int = 50,
-        patience: int = 10
-):
     optimizer = tf.keras.optimizers.Adam()
     model.compile(optimizer=optimizer, loss=loss)
     early_stop = tf.keras.callbacks.EarlyStopping(
@@ -124,83 +147,58 @@ def run_model(
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt_{epoch}")
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_prefix,
+        save_best_only=True,
         save_weights_only=True)
     history = model.fit(tr_dataset, epochs=epochs, callbacks=[
                         checkpoint_callback, early_stop], validation_data=val_dataset)
-    logger.info("Training stopped as there was no improvement after {} epochs".format(patience))
+    logger.info(
+        "Training stopped, no improvement after {} epochs".format(patience))
 
 
-def generation(
-        batch_size: int = 64,
-        buffer_size: int = 10000,
-        embedding_dim: int = 256,
-        seq_length: int = 200,
-        rnn_units: int = 1024,
-):
-    logger.info("Looking through data...")
+def generate_text(model,
+                  char2int: Set[str],
+                  int2char: np.ndarray,
+                  start_string: str):
+    logger.info('Generating with seed: "%s"', start_string)
 
-    logger.info("Looking through training data...")
-    tr_count, tr_text = txt_data("./data/training")
-    logger.info("Found %d training files.", tr_count)
+    num_generate = 1000
+    input_eval = [char2int[s] for s in start_string]
+    input_eval = tf.expand_dims(input_eval, 0)
+    text_generated = []
+    temperature = 1.0
+    model.reset_states()
+    for i in range(num_generate):
+        predictions = model(input_eval)
+        predictions = tf.squeeze(predictions, 0)
+        predictions = predictions / temperature
+        predicted_id = tf.random.categorical(
+            predictions, num_samples=1)[-1, 0].numpy()
+        input_eval = tf.expand_dims([predicted_id], 0)
+        text_generated.append(int2char[predicted_id])
+    return (start_string + ''.join(text_generated))
 
-    logger.info("Looking through validation data...")
-    val_count, val_text = txt_data("./data/validation")
-    logger.info("Found %d validation files.", val_count)
 
-    logger.info("Preparing data...")
-    vocab, char2int, int2char = extract_vocab(tr_text + val_text)
-    vocab_len = len(vocab)
+def main():
+    # Persistent variables that I have not yet compartmentalize.
+    batch_size: int = 64
+    embedding_dim: int = 256
+    rnn_units: int = 1024
+    checkpoint_dir = os.path.join(".", "checkpoints", 'cp_x')
 
-    tr_data = parse_text(vocab, char2int, tr_text)
-    tr_dataset = prep_dataset(tr_data, batch_size, buffer_size, seq_length)
-    val_data = parse_text(vocab, char2int, val_text)
-    val_dataset = prep_dataset(val_data, batch_size, buffer_size, seq_length)
+    vocab_len, char2int, int2char, tr_dataset, val_dataset = get_datasets(
+        batch_size)
 
-    logger.info("Training text size:       \t%d", len(tr_data))
-    logger.info("Validation text size:     \t%d", len(val_text))
-    logger.info("Training:validation ratio:\t%f", len(tr_data) / len(val_text))
+    # Train and build the model.
+    train_model(build_model(
+        vocab_len,
+        embedding_dim,
+        rnn_units,
+        batch_size
+    ), tr_dataset, val_dataset, checkpoint_dir)
 
-    logger.info("Building model...")
-
-    model = build_model(
-        vocab_size=vocab_len,
-        embedding_dim=embedding_dim,
-        rnn_units=rnn_units,
-        batch_size=batch_size
-    )
-
-    model.summary()
-
-    # return
-
-    checkpoint_dir = os.path.join(
-        './checkpoints/', 'checkpoint' + time_for_file())
-
-    run_model(model, checkpoint_dir, tr_dataset, val_dataset)
-
-    model = build_model(vocab_len, embedding_dim, rnn_units, batch_size=1)
+    # Reconstruct and feed the checkpoint data into the model.
+    model = build_model(vocab_len, embedding_dim, rnn_units, 1)
     model.load_weights(tf.train.latest_checkpoint(checkpoint_dir))
     model.build(tf.TensorShape([1, None]))
 
-
-    def generate_text(model, start_string):
-        logger.info('Generating with seed: "%s"', start_string)
-
-        num_generate = 1000
-        input_eval = [char2int[s] for s in start_string]
-        input_eval = tf.expand_dims(input_eval, 0)
-        text_generated = []
-        temperature = 1.0
-        model.reset_states()
-        for i in range(num_generate):
-            predictions = model(input_eval)
-            predictions = tf.squeeze(predictions, 0)
-            predictions = predictions / temperature
-            predicted_id = tf.random.categorical(
-                predictions,      num_samples=1)[-1, 0].numpy()
-            input_eval = tf.expand_dims([predicted_id], 0)
-            text_generated.append(int2char[predicted_id])
-        return (start_string + ''.join(text_generated))
-    logger.info(generate_text(model, start_string="the deep dark"))
-
-generation()
+    print(generate_text(model, char2int, int2char, "the deep dark"))

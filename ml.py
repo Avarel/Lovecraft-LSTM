@@ -79,7 +79,8 @@ def train_model(model: tf.keras.Model,
                 val_dataset: tf.data.Dataset,
                 checkpoint_dir: str,
                 epochs: int = 100,
-                patience: int = 10):
+                patience: int = 10,
+                save_one: bool = False):
     def loss(labels, logits):
         return tf.keras.losses.sparse_categorical_crossentropy(labels, logits, from_logits=True)
 
@@ -89,10 +90,10 @@ def train_model(model: tf.keras.Model,
         monitor='val_loss', patience=patience)
 
     logger.info("Begin training... (this will take a while)")
-    checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt_{epoch}")
+    checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt" if save_one else "ckpt_{epoch}")
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_prefix,
-        save_best_only=True,
+        save_best_only=save_one,
         save_weights_only=True)
     history = model.fit(tr_dataset, epochs=epochs, callbacks=[
                         checkpoint_callback, early_stop], validation_data=val_dataset)

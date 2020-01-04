@@ -34,7 +34,7 @@ def txt_from_dir(dir: str) -> Tuple[int, str]:
         if file.endswith('.txt'):
             logger.debug("Found file %s", file)
             count += 1
-            text += open(os.path.join(dir, file)).read()
+            text += open(os.path.join(dir, file)).read() + '\n'
     return count, text
 
 

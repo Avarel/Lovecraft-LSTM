@@ -7,22 +7,22 @@ A machine learning (Tensorflow) program that generates Lovecraftian horrors for 
 _________________________________________________________________
 Layer (type)                 Output Shape              Param #   
 =================================================================
-embedding_1 (Embedding)      (64, None, 256)           23040     
+embedding (Embedding)        (64, None, 256)           24064     
 _________________________________________________________________
-dropout_3 (Dropout)          (64, None, 256)           0         
+dropout (Dropout)            (64, None, 256)           0         
 _________________________________________________________________
-lstm_2 (LSTM)                (64, None, 1024)          5246976   
+lstm (LSTM)                  (64, None, 4096)          71319552  
 _________________________________________________________________
-dropout_4 (Dropout)          (64, None, 1024)          0         
+dropout_1 (Dropout)          (64, None, 4096)          0         
 _________________________________________________________________
-lstm_3 (LSTM)                (64, None, 1024)          8392704   
+lstm_1 (LSTM)                (64, None, 4096)          134234112 
 _________________________________________________________________
-dropout_5 (Dropout)          (64, None, 1024)          0         
+dropout_2 (Dropout)          (64, None, 4096)          0         
 _________________________________________________________________
-dense_1 (Dense)              (64, None, 90)            92250     
+dense (Dense)                (64, None, 94)            385118    
 =================================================================
-Total params: 13,683,234
-Trainable params: 13,683,234
+Total params: 205,962,846
+Trainable params: 205,962,846
 Non-trainable params: 0
 _________________________________________________________________
 ```
@@ -91,12 +91,14 @@ ml.generate_text(model, char2int, int2char, "the deep dark")
 ```
 
 #### Downloading Checkpoints
-
-* Use the following lines.
-    ```python
-    from google.colab import files
-    files.download('./checkpoints/cp_XXXX/ckpt_XX.data-0000X-of-0000X') 
-    ```
+Use the following lines.
+```python
+from google.colab import files
+files.download('./checkpoints/cp_x/checkpoint') 
+files.download('./checkpoints/cp_x/ckpt.index') 
+files.download('./checkpoints/cp_x/ckpt.data-00000-of-00002') 
+files.download('./checkpoints/cp_x/ckpt.data-00001-of-00002') 
+```
 
 # Sample
 Here's a sample so far! Nothing interesting though. Need to feed more data into the model.

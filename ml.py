@@ -104,14 +104,15 @@ def train_model(model: tf.keras.Model,
 def generate_text(model,
                   char2int: Set[str],
                   int2char: np.ndarray,
-                  start_string: str):
+                  start_string: str,
+                  num_generate: int = 1000,
+                  temperature: float = 1.0):
     logger.info('Generating with seed: "%s"', start_string)
 
-    num_generate = 1000
     input_eval = [char2int[s] for s in start_string]
     input_eval = tf.expand_dims(input_eval, 0)
     text_generated = []
-    temperature = 1.0
+    
     model.reset_states()
     for i in range(num_generate):
         predictions = model(input_eval)
